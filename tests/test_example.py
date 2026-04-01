@@ -22,6 +22,7 @@ def test_assert_ai_chat_quality():
         timeout=30.0,
     ) as client:
         try:
+            # Trigger an evaluation run for the configured report.
             run_response = client.post(
                 f"/reports/{report_id}/run",
                 json={"name": run_name},
@@ -34,6 +35,7 @@ def test_assert_ai_chat_quality():
             last_status = None
 
             while time.monotonic() < deadline:
+                # Check the evaluation run status until it completes.
                 status_response = client.get(f"/reports/{run_report_id}")
                 status_response.raise_for_status()
                 last_status = status_response.json().get("status")
@@ -41,9 +43,10 @@ def test_assert_ai_chat_quality():
                 if last_status == "COMPLETED":
                     break
 
-                if last_status in {"FAILED", "CANCELLED"}:
+                if last_status != "RUNNING":
                     pytest.fail(
-                        f"PromptLayer report run ended with status {last_status}"
+                        "PromptLayer report run returned unexpected status "
+                        f"{last_status!r}; expected 'RUNNING' or 'COMPLETED'"
                     )
 
                 time.sleep(POLL_INTERVAL_SECONDS)
@@ -53,6 +56,7 @@ def test_assert_ai_chat_quality():
                     f"to complete; last status was {last_status!r}"
                 )
 
+            # Fetch the completed evaluation run score.
             score_response = client.get(f"/reports/{run_report_id}/score")
             score_response.raise_for_status()
         except httpx.HTTPError as exc:
