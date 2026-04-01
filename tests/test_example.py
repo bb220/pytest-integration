@@ -1,23 +1,24 @@
-import os
 import time
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
-
-BASE_URL = "https://api.promptlayer.com"
-DEFAULT_SCORE_THRESHOLD = 80.0
-POLL_INTERVAL_SECONDS = 5
-TIMEOUT_SECONDS = 300
+from tests.settings import Settings
 
 
 def test_assert_ai_chat_quality():
-    api_key = os.environ.get("PROMPTLAYER_API_KEY")
-    report_id = os.environ.get("PROMPTLAYER_REPORT_ID")
+    try:
+        settings = Settings()
+    except ValidationError as exc:
+        pytest.fail(f"PromptLayer configuration is invalid: {exc}")
+
+    api_key = settings.promptlayer_api_key
+    report_id = settings.promptlayer_report_id
     run_name = f"pytest-ai-chat-quality-{int(time.time())}"
 
     with httpx.Client(
-        base_url=BASE_URL,
+        base_url=settings.promptlayer_base_url,
         headers={"X-API-KEY": api_key},
         timeout=30.0,
     ) as client:
@@ -31,7 +32,7 @@ def test_assert_ai_chat_quality():
             run_report_id = run_response.json().get("report_id")
             assert run_report_id, "PromptLayer run response did not include report_id"
 
-            deadline = time.monotonic() + TIMEOUT_SECONDS
+            deadline = time.monotonic() + settings.timeout_seconds
             last_status = None
 
             while time.monotonic() < deadline:
@@ -49,7 +50,7 @@ def test_assert_ai_chat_quality():
                         f"{last_status!r}; expected 'RUNNING' or 'COMPLETED'"
                     )
 
-                time.sleep(POLL_INTERVAL_SECONDS)
+                time.sleep(settings.poll_interval_seconds)
             else:
                 pytest.fail(
                     f"Timed out waiting for PromptLayer report {run_report_id} "
@@ -68,7 +69,7 @@ def test_assert_ai_chat_quality():
         f"PromptLayer score response missing numeric score.overall_score: "
         f"{score_response.json()}"
     )
-    assert overall_score >= DEFAULT_SCORE_THRESHOLD, (
+    assert overall_score >= settings.default_score_threshold, (
         f"PromptLayer overall_score {overall_score} "
-        f"did not meet threshold {DEFAULT_SCORE_THRESHOLD}"
+        f"did not meet threshold {settings.default_score_threshold}"
     )
