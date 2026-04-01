@@ -1,10 +1,12 @@
-# PromptLayer pytest integration
+# 🍰 PromptLayer pytest integration 
 
 This project uses the PromptLayer API to run an evaluation as part of a pytest integration test.
 
 1. Loads PromptLayer configuration from `.env`.
 2. Triggers and polls a PromptLayer evaluation run.
 3. Retrieves the final score and asserts it meets a minimum threshold.
+
+PromptLayer REST API docs: https://docs.promptlayer.com/reference/rest-api-reference
 
 ## Quickstart
 Create a local `.env` file from the example and provide your PromptLayer credentials:
@@ -39,4 +41,3 @@ Run the test suite with `uv`:
 
 ```bash
 uv run pytest
-
