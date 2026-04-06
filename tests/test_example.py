@@ -7,7 +7,7 @@ from pydantic import ValidationError
 from tests.settings import Settings
 
 
-def test_assert_ai_chat_quality():
+def test_assert_llm_quality():
     try:
         settings = Settings()
     except ValidationError as exc:
@@ -15,7 +15,7 @@ def test_assert_ai_chat_quality():
 
     api_key = settings.promptlayer_api_key
     report_id = settings.promptlayer_report_id
-    run_name = f"pytest-ai-chat-quality-{int(time.time())}"
+    run_name = f"pdf-extraction-quality-staging-{int(time.time())}"
 
     with httpx.Client(
         base_url=settings.promptlayer_base_url,
@@ -57,18 +57,28 @@ def test_assert_ai_chat_quality():
                     f"to complete; last status was {last_status!r}"
                 )
 
-            # Fetch the completed evaluation run score.
-            score_response = client.get(f"/reports/{run_report_id}/score")
-            score_response.raise_for_status()
+            score_deadline = time.monotonic() + settings.timeout_seconds
+            score_payload = None
+            overall_score = None
+
+            while time.monotonic() < score_deadline:
+                # Fetch the completed evaluation run score until it populates with an overall_score.
+                score_response = client.get(f"/reports/{run_report_id}/score")
+                score_response.raise_for_status()
+                score_payload = score_response.json()
+                overall_score = score_payload.get("score", {}).get("overall_score")
+
+                if isinstance(overall_score, (int, float)):
+                    break
+
+                time.sleep(settings.poll_interval_seconds)
+            else:
+                pytest.fail(
+                    "Timed out waiting for PromptLayer report score; "
+                    f"last score response was {score_payload}"
+                )
         except httpx.HTTPError as exc:
             pytest.fail(f"PromptLayer API request failed: {exc}")
-
-    overall_score = score_response.json().get("score", {}).get("overall_score")
-
-    assert isinstance(overall_score, (int, float)), (
-        f"PromptLayer score response missing numeric score.overall_score: "
-        f"{score_response.json()}"
-    )
     assert overall_score >= settings.default_score_threshold, (
         f"PromptLayer overall_score {overall_score} "
         f"did not meet threshold {settings.default_score_threshold}"
